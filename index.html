@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>太陽系 · 銀河系 自轉公轉動畫</title>
+<style>
+  :root {
+    --bg: #05060a;
+    --panel: rgba(14, 18, 30, 0.72);
+    --panel-border: rgba(120, 150, 220, 0.22);
+    --accent: #6fa8ff;
+    --accent-dim: #2b3a5e;
+    --text: #e6ecf7;
+    --text-dim: #93a0bd;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; color: var(--text); }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .label-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .lbl {
+    pointer-events: none; font-size: 11px; color: var(--text);
+    text-shadow: 0 0 4px #000, 0 0 8px #000; white-space: nowrap;
+    transform: translate(-50%, 0); opacity: 0.9;
+  }
+  .lbl.sun { color: #ffe6a0; font-weight: 600; }
+  .lbl.dwarf { color: #b9c4dc; font-size: 10px; opacity: 0.75; }
+  .lbl.gx { color: #cfe0ff; font-weight: 600; font-size: 12px; }
+  .lbl.locator { color: #ffe6a0; font-weight: 600; font-size: 13px; }
+
+  #panel {
+    position: absolute; top: 14px; left: 14px; width: 270px; padding: 14px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45); user-select: none;
+  }
+  #panel h1 { font-size: 13px; margin: 0 0 10px; letter-spacing: 0.5px; color: var(--text-dim); font-weight: 600; }
+  .seg { display: flex; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; margin-bottom: 12px; }
+  .seg button { flex: 1; border: 0; background: transparent; color: var(--text-dim); padding: 7px 0; border-radius: 7px; cursor: pointer; font-size: 13px; transition: 0.15s; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  button.btn, #panel .row button, .date button, #infoBtn {
+    border: 1px solid var(--panel-border); background: rgba(255,255,255,0.05);
+    color: var(--text); padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; transition: 0.15s;
+  }
+  button.btn:hover, .date button:hover, #infoBtn:hover, #panel .row button:hover { background: rgba(111,168,255,0.18); }
+  #playBtn { min-width: 78px; }
+  .read { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  input[type=range] { width: 100%; margin: 2px 0 8px; accent-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+  .presets button { flex: 0 0 auto; font-size: 10.5px; padding: 4px 7px; border: 1px solid var(--accent-dim); background: rgba(255,255,255,0.04); color: var(--text-dim); border-radius: 6px; cursor: pointer; }
+  .presets button:hover { color: var(--text); border-color: var(--accent); }
+
+  .date { gap: 6px; flex-wrap: wrap; }
+  .date input[type="datetime-local"] {
+    flex: 1 1 100%; background: rgba(0,0,0,0.35); border: 1px solid var(--panel-border);
+    color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: 12px; color-scheme: dark;
+  }
+  #dateRead { font-size: 12px; color: var(--text-dim); margin: 6px 0 12px; font-variant-numeric: tabular-nums; }
+  #dateRead b { color: var(--accent); }
+
+  .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-bottom: 12px; }
+  .layers label { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .layers input { accent-color: var(--accent); }
+
+  #infoBtn { width: 100%; text-align: center; }
+
+  #info {
+    position: absolute; top: 14px; right: 14px; width: 350px; max-width: calc(100vw - 28px);
+    padding: 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-size: 12.5px; line-height: 1.6; color: var(--text-dim);
+  }
+  #info h2 { font-size: 14px; color: var(--text); margin: 0 0 10px; }
+  #info ol { margin: 0; padding-left: 18px; }
+  #info li { margin-bottom: 7px; }
+  #info button { margin-top: 12px; width: 100%; }
+  .hidden { display: none !important; }
+
+  .hint { position: absolute; bottom: 12px; left: 50%; transform: translate(-50%, 0); font-size: 11px; color: var(--text-dim); opacity: 0.6; pointer-events: none; text-align: center; }
+
+  #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--text-dim); font-size: 14px; background: var(--bg); z-index: 50; }
+  #loading .spin { width: 28px; height: 28px; border: 3px solid var(--accent-dim); border-top-color: var(--accent); border-radius: 50%; animation: sp 0.9s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="panel">
+    <h1>太陽系 · 銀河系</h1>
+    <div class="seg" id="viewSeg">
+      <button data-view="solar">聚焦太陽系</button>
+      <button data-view="galaxy" class="active">環視銀河</button>
+    </div>
+
+    <div class="row">
+      <button id="playBtn" class="btn">⏸ 暫停</button>
+      <span class="read" id="speedRead"></span>
+    </div>
+    <input id="speed" type="range" min="0" max="1000" value="0" />
+    <div class="presets" id="presets">
+      <button data-sec="3600">1時/s</button>
+      <button data-sec="86400">1天/s</button>
+      <button data-sec="2629800">1月/s</button>
+      <button data-sec="31557600">1年/s</button>
+      <button data-sec="3155760000">100年/s</button>
+      <button data-sec="315576000000">1萬年/s</button>
+      <button data-sec="31557600000000">1Myr/s</button>
+      <button data-sec="3155760000000000">1億年/s</button>
+      <button data-sec="31557600000000000">10億年/s</button>
+    </div>
+
+    <div class="row date">
+      <input id="dt" type="datetime-local" />
+      <button id="nowBtn">現在</button>
+      <button id="fixBtn">固定</button>
+    </div>
+    <div id="dateRead">時間：<b>—</b></div>
+
+    <div class="layers">
+      <label><input type="checkbox" id="lyOrbits" checked> 軌道線</label>
+      <label><input type="checkbox" id="lyLabels" checked> 標籤</label>
+      <label><input type="checkbox" id="lyBelt" checked> 小行星帶</label>
+      <label><input type="checkbox" id="lyMoons" checked> 衛星</label>
+      <label><input type="checkbox" id="lyStars" checked> 星空</label>
+      <label><input type="checkbox" id="lyGalaxy" checked> 銀河盤面</label>
+      <label><input type="checkbox" id="lyCosmos" checked> 宇宙背景</label>
+    </div>
+
+    <button id="infoBtn">ⓘ 精度說明</button>
+  </div>
+
+  <div id="info" class="hidden">
+    <h2>精度說明</h2>
+    <ol>
+      <li><b>單一連續場景</b>：銀河在中心，太陽系是位於約 8 kpc 軌道上、繞銀心公轉的小群集。滾輪縮放即可在兩尺度間穿梭，或用上方按鈕一鍵聚焦。</li>
+      <li><b>尺度大幅壓縮</b>：真實太陽系與銀河相差約 10⁹ 倍，此處壓縮為約 33 倍，純為同畫面觀看，非真實比例。</li>
+      <li>行星位置使用簡化 JPL Kepler 軌道根數，僅 1800–2050 年 arcminute 級可信；深時間（如數十億年前）為極端外插、<b>無物理意義</b>（太陽系約 46 億年前才形成），該尺度僅供觀察銀河自轉與時間流逝。</li>
+      <li>自轉相位僅示意；衛星為風格化圓軌道；銀河臂數、平坦轉速、約 225 Myr 銀河年皆為示意平均。</li>
+      <li>太陽繞銀心並非平面圓：黃道面對銀盤傾斜約 60°，軌道含徑向本輪（玫瑰線、徑向週期 ~160 Myr）與上下穿越銀盤（~70 Myr）。</li>
+      <li>本星系群相對 CMB 以約 630 km/s 朝巨引源 / Shapley 超星系團（銀經 l≈276°、銀緯 b≈30°）運動；背景星系串流即呈現此運動。速度與目標為真實值，場景中的方向為示意（保留 b≈30° 仰角）。</li>
+      <li>天體大小經放大以利觀看，與軌道距離不同比例。</li>
+      <li>時間以 UTC 計，ΔT 忽略。</li>
+    </ol>
+    <button id="infoClose" class="btn">關閉</button>
+  </div>
+
+  <div class="hint">滑鼠拖曳旋轉 · 滾輪縮放穿梭尺度 · 空白鍵播放/暫停 · [ ] 調速</div>
+
+  <div id="loading"><div class="spin"></div>載入中…（需要網路載入 Three.js CDN）</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// =================================================================================
+// ===== SECTION 1 · 常數與資料表 ===================================================
+// =================================================================================
+const J2000 = 2451545.0;
+const DEG = Math.PI / 180;
+const TAU = Math.PI * 2;
+
+const K_DIST = 40;                 // 太陽系：1 AU -> 場景單位
+const EARTH_KM = 6371;
+const R_MIN = 0.4, R_SCALE = 1.1;
+const SUN_R = 6;
+
+// 銀河（與太陽系共用同一場景，間距經壓縮）
+const GX_UNIT = 2700;              // 場景單位 / kpc
+const GX_DISK_KPC = 15;            // 銀盤半徑
+const GX_SUN_KPC = 8.0;            // 太陽距銀心
+const GX_OMEGA = 0.225;            // rad/Myr @ 1 kpc（平坦轉速 v≈220km/s）
+const GX_CORE = 1.5;               // 核心剛性旋轉半徑
+const SUN_ORBIT = GX_SUN_KPC * GX_UNIT;   // 太陽繞銀心的軌道半徑（場景單位）
+const ECLIPTIC_TILT = 60.2 * DEG;  // 黃道面對銀河盤面的傾角（兩極夾角 ≈ 60.2°）
+const GX_Z_AMP = 0.07 * GX_UNIT;   // 太陽穿越銀盤的垂直振幅（~70 pc）
+const GX_Z_PERIOD = 70;            // 垂直振盪週期（Myr，示意）
+const GX_OMEGA_SUN = GX_OMEGA / Math.max(GX_SUN_KPC, GX_CORE); // 太陽導引角速度 rad/Myr
+const GX_KAPPA = Math.SQRT2 * GX_OMEGA_SUN;   // 本輪(徑向)頻率：平坦轉速曲線 κ=√2·Ω（徑向週期 ~160 Myr）
+const GX_EPI_AMP = 0.5;            // 徑向本輪振幅（kpc，約 6% 離心率）
+// 本星系群相對 CMB 的整體運動（速度/目標為真實值；場景方向為示意，保留 b≈30° 仰角）
+const GX_LG_KMS = 630;             // 相對 CMB 速度（km/s，朝巨引源/Shapley）
+const GX_DRIFT = GX_LG_KMS * 3.156e13 / 3.086e16 * GX_UNIT;    // 場景單位 / Myr
+const GX_BG_L = 520000;            // 宇宙背景星系的環形(toroidal)空間邊長
+const MOTION_DIR = new THREE.Vector3(
+  Math.cos(200 * DEG) * Math.cos(30 * DEG), Math.sin(30 * DEG), Math.sin(200 * DEG) * Math.cos(30 * DEG)
+).normalize();
+
+// 8 大行星 — JPL Table 1（J2000 值 + 每世紀變率）。L=平黃經, peri=ϖ 近日點黃經, node=Ω。
+const PLANETS = [
+  { name:'水星', en:'Mercury', color:0x9c9c9c, radiusKm:2439.7, rot:58.646,    tilt:0.034,
+    a:0.38709927,aDot:0.00000037, e:0.20563593,eDot:0.00001906, I:7.00497902,IDot:-0.00594749,
+    L:252.25032350,LDot:149472.67411175, peri:77.45779628,periDot:0.16047689, node:48.33076593,nodeDot:-0.12534081 },
+  { name:'金星', en:'Venus', color:0xe8cd9a, radiusKm:6051.8, rot:-243.025,   tilt:177.36,
+    a:0.72333566,aDot:0.00000390, e:0.00677672,eDot:-0.00004107, I:3.39467605,IDot:-0.00078890,
+    L:181.97909950,LDot:58517.81538729, peri:131.60246718,periDot:0.00268329, node:76.67984255,nodeDot:-0.27769418 },
+  { name:'地球', en:'Earth', color:0x4d7fff, radiusKm:6371, rot:0.99726968,  tilt:23.44,
+    a:1.00000261,aDot:0.00000562, e:0.01671123,eDot:-0.00004392, I:-0.00001531,IDot:-0.01294668,
+    L:100.46457166,LDot:35999.37244981, peri:102.93768193,periDot:0.32327364, node:0.0,nodeDot:0.0 },
+  { name:'火星', en:'Mars', color:0xc1502e, radiusKm:3389.5, rot:1.025957,   tilt:25.19,
+    a:1.52371034,aDot:0.00001847, e:0.09339410,eDot:0.00007882, I:1.84969142,IDot:-0.00813131,
+    L:-4.55343205,LDot:19140.30268499, peri:-23.94362959,periDot:0.44441088, node:49.55953891,nodeDot:-0.29257343 },
+  { name:'木星', en:'Jupiter', color:0xd2a679, radiusKm:69911, rot:0.41354,  tilt:3.13,
+    a:5.20288700,aDot:-0.00011607, e:0.04838624,eDot:-0.00013253, I:1.30439695,IDot:-0.00183714,
+    L:34.39644051,LDot:3034.74612775, peri:14.72847983,periDot:0.21252668, node:100.47390909,nodeDot:0.20469106 },
+  { name:'土星', en:'Saturn', color:0xe3cfa0, radiusKm:58232, rot:0.444, tilt:26.73, rings:true,
+    a:9.53667594,aDot:-0.00125060, e:0.05386179,eDot:-0.00050991, I:2.48599187,IDot:0.00193609,
+    L:49.95424423,LDot:1222.49362201, peri:92.59887831,periDot:-0.41897216, node:113.66242448,nodeDot:-0.28867794 },
+  { name:'天王星', en:'Uranus', color:0xa6e0e8, radiusKm:25362, rot:-0.71833, tilt:97.77,
+    a:19.18916464,aDot:-0.00196176, e:0.04725744,eDot:-0.00004397, I:0.77263783,IDot:-0.00242939,
+    L:313.23810451,LDot:428.48202785, peri:170.95427630,periDot:0.40805281, node:74.01692503,nodeDot:0.04240589 },
+  { name:'海王星', en:'Neptune', color:0x3b6fd6, radiusKm:24622, rot:0.6713, tilt:28.32,
+    a:30.06992276,aDot:0.00026291, e:0.00859048,eDot:0.00005105, I:1.77004347,IDot:0.00035372,
+    L:-55.12002969,LDot:218.45945325, peri:44.96476227,periDot:-0.32241464, node:131.78422574,nodeDot:-0.00508664 },
+];
+
+// 矮行星 — 靜態 J2000 振盪根數（近似，僅示意）。
+const DWARFS = [
+  { name:'冥王星', en:'Pluto',    color:0xcdb89a, radiusKm:1188, a:39.482, e:0.2488, I:17.16, node:110.299, peri:224.07, M0:14.86 },
+  { name:'穀神星', en:'Ceres',    color:0xb0a070, radiusKm:469,  a:2.7675, e:0.0758, I:10.59, node:80.33,  peri:153.0,  M0:134.4 },
+  { name:'鬩神星', en:'Eris',     color:0xd8d8e0, radiusKm:1163, a:67.78, e:0.4416, I:44.04, node:35.95,  peri:187.1,  M0:17.0 },
+  { name:'妊神星', en:'Haumea',   color:0xd0d0c4, radiusKm:816,  a:43.13, e:0.195,  I:28.21, node:121.9,  peri:240.2,  M0:218.0 },
+  { name:'鳥神星', en:'Makemake', color:0xc89a78, radiusKm:715,  a:45.43, e:0.159,  I:29.0,  node:79.6,   peri:296.7,  M0:165.0 },
+];
+
+const MOONS = {
+  Earth:   [ {name:'月球', T:27.3217, radiusKm:1737, color:0xbfbfbf} ],
+  Jupiter: [ {name:'Io', T:1.769, radiusKm:1821, color:0xe8e36a}, {name:'Europa', T:3.551, radiusKm:1560, color:0xddccaa},
+             {name:'Ganymede', T:7.155, radiusKm:2634, color:0xa9a39a}, {name:'Callisto', T:16.689, radiusKm:2410, color:0x8a8278} ],
+  Saturn:  [ {name:'Tethys', T:1.888, radiusKm:531, color:0xcccccc}, {name:'Dione', T:2.737, radiusKm:561, color:0xbcbcbc},
+             {name:'Rhea', T:4.518, radiusKm:764, color:0xc4c4c4}, {name:'Titan', T:15.945, radiusKm:2575, color:0xd9a86a},
+             {name:'Iapetus', T:79.32, radiusKm:735, color:0x9a8c78} ],
+};
+
+// =================================================================================
+// ===== SECTION 2 · 天文數學（純函式） ============================================
+// =================================================================================
+const dateToJD = (d) => d.getTime() / 86400000 + 2440587.5;
+const jdToDate = (jd) => new Date((jd - 2440587.5) * 86400000);
+const normDeg = (x) => ((x % 360) + 540) % 360 - 180;
+
+function solveKepler(M, e) {
+  let E = M;
+  for (let i = 0; i < 30; i++) {
+    const dE = (M - (E - e * Math.sin(E))) / (1 - e * Math.cos(E));
+    E += dE;
+    if (Math.abs(dE) < 1e-9) break;
+  }
+  return E;
+}
+
+function eclFromElements(a, e, I, omega, Omega, E) {
+  const xp = a * (Math.cos(E) - e);
+  const yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  const co = Math.cos(omega), so = Math.sin(omega);
+  const cO = Math.cos(Omega), sO = Math.sin(Omega);
+  const ci = Math.cos(I),     si = Math.sin(I);
+  const x = (co * cO - so * sO * ci) * xp + (-so * cO - co * sO * ci) * yp;
+  const y = (co * sO + so * cO * ci) * xp + (-so * sO + co * cO * ci) * yp;
+  const z = (so * si) * xp + (co * si) * yp;
+  return { x, y, z };
+}
+
+function planetPosition(p, jd) {
+  const T = (jd - J2000) / 36525;
+  const a = p.a + p.aDot * T;
+  const e = p.e + p.eDot * T;
+  const I = (p.I + p.IDot * T) * DEG;
+  const L = p.L + p.LDot * T;
+  const peri = p.peri + p.periDot * T;
+  const node = p.node + p.nodeDot * T;
+  const omega = (peri - node) * DEG;
+  const M = normDeg(L - peri) * DEG;
+  const E = solveKepler(M, e);
+  return eclFromElements(a, e, I, omega, node * DEG, E);
+}
+
+function staticBodyPosition(d, jd) {
+  const n = 0.9856076686 / Math.sqrt(d.a * d.a * d.a);
+  const M = normDeg(d.M0 + n * (jd - J2000)) * DEG;
+  const E = solveKepler(M, d.e);
+  return eclFromElements(d.a, d.e, d.I * DEG, (d.peri - d.node) * DEG, d.node * DEG, E);
+}
+
+// 行星星曆時間視窗：JPL 線性變率在 |T| 過大時會發散（a 變負、e 爆炸 → NaN）。
+// 將時間包進 ±300 年的週期視窗：1800–2050 真實日期落在窗內 → 精確不受影響；
+// 窗外（如深時間宇宙尺度）週期循環，行星永遠保持合理且持續運動的位置。
+function wrapPlanetJD(jd) {
+  const P = 600 * 365.25;
+  let w = ((jd - J2000) % P + P) % P;   // [0, P)
+  if (w > P / 2) w -= P;                // (-P/2, P/2]
+  return J2000 + w;
+}
+
+const eclToScene = (p, k) => new THREE.Vector3(p.x * k, p.z * k, -p.y * k);
+const displayRadius = (radiusKm) => R_MIN + Math.pow(radiusKm / EARTH_KM, 0.4) * R_SCALE;
+
+// 太陽繞銀心的公轉角（與銀盤同步）
+function galacticSunAngle(jd) {
+  const tMyr = (jd - J2000) / 365.25 / 1e6;
+  return (GX_OMEGA / Math.max(GX_SUN_KPC, GX_CORE)) * tMyr;
+}
+
+// =================================================================================
+// ===== SECTION 3 · 渲染資源 + 程序化貼圖工具 =====================================
+// =================================================================================
+const appEl = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+appEl.appendChild(renderer.domElement);
+
+const labelR = new CSS2DRenderer();
+labelR.setSize(innerWidth, innerHeight);
+labelR.domElement.className = 'label-layer';
+document.body.appendChild(labelR.domElement);
+
+function randn() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random()); }
+
+function planetTexture(colorHex, { bands = false, caps = false } = {}) {
+  const w = 512, h = 256;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d');
+  const base = new THREE.Color(colorHex);
+  g.fillStyle = '#' + base.getHexString(); g.fillRect(0, 0, w, h);
+  if (bands) {
+    let y = 0;
+    while (y < h) {
+      const bh = 6 + Math.random() * 18;
+      const c = base.clone().offsetHSL(0, (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.22);
+      g.fillStyle = '#' + c.getHexString(); g.fillRect(0, y, w, bh); y += bh;
+    }
+  } else {
+    for (let i = 0; i < 1400; i++) {
+      const c = base.clone().offsetHSL(0, 0, (Math.random() - 0.5) * 0.28);
+      g.fillStyle = '#' + c.getHexString();
+      g.beginPath(); g.arc(Math.random() * w, Math.random() * h, 1 + Math.random() * 5, 0, TAU); g.fill();
+    }
+  }
+  if (caps) {
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.fillRect(0, 0, w, 10 + Math.random() * 8);
+    g.fillRect(0, h - 18, w, 18);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+
+function glowSprite(color, size) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  const c = new THREE.Color(color);
+  grad.addColorStop(0,   `rgba(${c.r*255|0},${c.g*255|0},${c.b*255|0},0.95)`);
+  grad.addColorStop(0.25,`rgba(${c.r*255|0},${c.g*255|0},${c.b*255|0},0.55)`);
+  grad.addColorStop(1,   'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+  const s = new THREE.Sprite(mat); s.scale.set(size, size, 1);
+  return s;
+}
+
+function makeStarfield(radius, count, sizeVal) {
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const u = Math.random(), v = Math.random();
+    const theta = TAU * u, phi = Math.acos(2 * v - 1);
+    const r = radius * (0.85 + Math.random() * 0.15);
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i*3+2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: sizeVal, sizeAttenuation: false, transparent: true, opacity: 0.85 }));
+  pts.frustumCulled = false;
+  return pts;
+}
+
+function softDiscTexture() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.4, 'rgba(255,255,255,0.45)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
+}
+
+// 宇宙背景：遠方星系，分布於環形(toroidal)空間。每幀沿 -MOTION_DIR 串流，呈現本星系群整體運動。
+function makeCosmicBackground() {
+  const n = 2600, L = GX_BG_L;
+  const base = new Float32Array(n * 3), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    base[i*3] = Math.random() * L; base[i*3+1] = Math.random() * L; base[i*3+2] = Math.random() * L;
+    // 多數偏黃白星系，部分偏藍，少數偏紅
+    const h = Math.random();
+    const hue = h < 0.65 ? 0.09 + Math.random() * 0.05 : (h < 0.88 ? 0.58 + Math.random() * 0.04 : 0.0);
+    const c = new THREE.Color().setHSL(hue, 0.5, 0.58 + Math.random() * 0.28);
+    col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({ size: 4200, map: softDiscTexture(), vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, sizeAttenuation: true, blending: THREE.AdditiveBlending });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false;
+  return { pts, base, pos, geo, L, n, spacing: L / Math.cbrt(n) };
+}
+
+function makeLabel(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'lbl' + (cls ? ' ' + cls : '');
+  div.textContent = text;
+  return new CSS2DObject(div);
+}
+
+function makeOrbitLine(el, colorHex) {
+  const N = 256, a = el.a, e = el.e, I = el.I * DEG;
+  const omega = (el.peri - el.node) * DEG, node = el.node * DEG;
+  const pts = [];
+  for (let i = 0; i <= N; i++) pts.push(eclToScene(eclFromElements(a, e, I, omega, node, (i / N) * TAU), K_DIST));
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(geo, new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.35 }));
+}
+
+// =================================================================================
+// ===== SECTION 4 · 單一宇宙場景（銀河 + 太陽系群集） =============================
+// =================================================================================
+const GX_VERT = `
+  uniform float uTimeMyr; uniform float uKpc; uniform float uPixel; uniform float uScale;
+  attribute float aR; attribute float aTheta0; attribute float aY; attribute float aSize; attribute vec3 aColor;
+  varying vec3 vColor;
+  void main() {
+    vColor = aColor;
+    float rkpc = aR / uKpc;
+    float rEff = max(rkpc, ${GX_CORE.toFixed(2)});
+    float omega = ${GX_OMEGA.toFixed(4)} / rEff;
+    float ang = aTheta0 + omega * uTimeMyr;
+    vec3 p = vec3(aR * cos(ang), aY, aR * sin(ang));
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = clamp(aSize * uPixel * uScale / -mv.z, 0.5, 9.0);
+  }`;
+const GX_FRAG = `
+  varying vec3 vColor;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    gl_FragColor = vec4(vColor, smoothstep(0.5, 0.0, d));
+  }`;
+
+function buildGalaxyDisk() {
+  const N = 60000, armN = 4, b = 0.25, aSp = 1.6;
+  const position = new Float32Array(N * 3);
+  const aR = new Float32Array(N), aTheta0 = new Float32Array(N), aY = new Float32Array(N), aSize = new Float32Array(N);
+  const aColor = new Float32Array(N * 3);
+  const core = new THREE.Color(0xffd9a0), arm = new THREE.Color(0x8fb6ff), mid = new THREE.Color(0xfff0e0);
+  for (let i = 0; i < N; i++) {
+    let rkpc, theta0, y, size;
+    if (i < N * 0.30) {
+      rkpc = Math.min(5, Math.abs(randn()) * 1.7);
+      theta0 = Math.random() * TAU;
+      y = randn() * 0.55 * GX_UNIT / (1 + rkpc * 0.5);
+      size = 1.4 + Math.random() * 1.6;
+    } else {
+      const k = Math.floor(Math.random() * armN);
+      rkpc = 2 + Math.pow(Math.random(), 0.8) * (GX_DISK_KPC - 2);
+      theta0 = Math.log(rkpc / aSp) / b + k * (TAU / armN) + randn() * 0.18;
+      rkpc += randn() * 0.4;
+      y = randn() * 0.16 * GX_UNIT;
+      size = 1.0 + Math.random() * 1.4;
+    }
+    rkpc = Math.max(0.05, rkpc);
+    const rs = rkpc * GX_UNIT;
+    position[i*3] = rs * Math.cos(theta0); position[i*3+1] = y; position[i*3+2] = rs * Math.sin(theta0);
+    aR[i] = rs; aTheta0[i] = theta0; aY[i] = y; aSize[i] = size;
+    const t = Math.min(1, rkpc / GX_DISK_KPC);
+    const c = (rkpc < 3 ? core.clone().lerp(mid, rkpc / 3) : mid.clone().lerp(arm, (t - 0.23) / 0.77));
+    c.offsetHSL(0, 0, (Math.random() - 0.5) * 0.1);
+    aColor[i*3] = c.r; aColor[i*3+1] = c.g; aColor[i*3+2] = c.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(position, 3));
+  geo.setAttribute('aR', new THREE.BufferAttribute(aR, 1));
+  geo.setAttribute('aTheta0', new THREE.BufferAttribute(aTheta0, 1));
+  geo.setAttribute('aY', new THREE.BufferAttribute(aY, 1));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(aSize, 1));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(aColor, 3));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTimeMyr: { value: 0 }, uKpc: { value: GX_UNIT }, uPixel: { value: renderer.getPixelRatio() }, uScale: { value: 55000 } },
+    vertexShader: GX_VERT, fragmentShader: GX_FRAG,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false;
+  return { pts, mat };
+}
+
+function buildUniverse() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 800000);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minDistance = 5; controls.maxDistance = 400000;
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.16); scene.add(ambient);
+  const starfield = makeStarfield(200000, 4500, 1.4); scene.add(starfield);
+
+  // 宇宙背景星系 + 本星系群運動方向箭頭
+  const cosmic = makeCosmicBackground(); scene.add(cosmic.pts);
+  const arrow = new THREE.ArrowHelper(MOTION_DIR, new THREE.Vector3(0, 0, 0), 56000, 0x66ccff, 7000, 3600);
+  arrow.line.material.transparent = true; arrow.line.material.opacity = 0.85;
+  scene.add(arrow);
+  const motionLabel = makeLabel('本星系群 ~630 km/s →（巨引源 / Shapley 方向，相對 CMB）', 'gx');
+  motionLabel.position.copy(MOTION_DIR).multiplyScalar(61000); scene.add(motionLabel);
+
+  // 銀盤
+  const galaxy = buildGalaxyDisk();
+  const galaxyGroup = new THREE.Group(); galaxyGroup.add(galaxy.pts); scene.add(galaxyGroup);
+
+  // 銀心
+  const center = new THREE.Mesh(new THREE.SphereGeometry(GX_UNIT * 0.18, 24, 24), new THREE.MeshBasicMaterial({ color: 0xfff2c0 }));
+  center.add(glowSprite(0xffe0a0, GX_UNIT * 3));
+  const cLabel = makeLabel('銀河中心', 'gx'); cLabel.position.set(0, GX_UNIT * 0.5, 0); center.add(cLabel);
+  scene.add(center);
+
+  // 太陽系群集（位於太陽的銀河軌道上，整體繞銀心公轉）
+  // 黃道面相對銀盤固定傾斜 ~60°（慣性方向固定，不隨公轉旋轉）
+  const solarGroup = new THREE.Group(); solarGroup.rotation.x = ECLIPTIC_TILT; scene.add(solarGroup);
+  const detailLabels = [];
+  const moonMeshes = [];
+  const bodies = [];
+
+  const sunLight = new THREE.PointLight(0xfff3d6, 3, 0, 0); solarGroup.add(sunLight);
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 48, 48), new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
+  sun.add(glowSprite(0xffe6a0, SUN_R * 3.5));
+  const sunLabel = makeLabel('太陽', 'sun'); sunLabel.position.set(0, SUN_R + 2.5, 0); sun.add(sunLabel); detailLabels.push(sunLabel);
+  solarGroup.add(sun);
+
+  // 從遠處（銀河尺度）指示太陽系位置的大光暈 + 標籤
+  const locatorGlow = glowSprite(0xffe6a0, 2800); solarGroup.add(locatorGlow);
+  const locatorLabel = makeLabel('太陽系', 'locator'); locatorLabel.position.set(0, 600, 0); solarGroup.add(locatorLabel);
+
+  const orbitsGroup = new THREE.Group(); solarGroup.add(orbitsGroup);
+
+  for (const p of PLANETS) {
+    const group = new THREE.Group(); solarGroup.add(group);
+    const tilt = new THREE.Group(); tilt.rotation.z = p.tilt * DEG; group.add(tilt);
+    const pr = displayRadius(p.radiusKm);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(pr, 40, 40),
+      new THREE.MeshStandardMaterial({ map: planetTexture(p.color, { bands: p.radiusKm > 20000, caps: p.en === 'Earth' || p.en === 'Mars' }), roughness: 0.92, metalness: 0 }));
+    tilt.add(mesh);
+    if (p.rings) {
+      const ring = (ri, ro, op) => {
+        const m = new THREE.Mesh(new THREE.RingGeometry(pr * ri, pr * ro, 80),
+          new THREE.MeshBasicMaterial({ color: 0xd9c9a0, side: THREE.DoubleSide, transparent: true, opacity: op, depthWrite: false }));
+        m.rotation.x = Math.PI / 2; tilt.add(m);
+      };
+      ring(1.3, 1.92, 0.55); ring(2.0, 2.32, 0.32);
+    }
+    const label = makeLabel(p.name); label.position.set(0, pr + 1.4, 0); group.add(label); detailLabels.push(label);
+
+    const list = (MOONS[p.en] || []).slice().sort((a, b) => a.T - b.T);
+    const moons = list.map((m, idx) => {
+      const mr = Math.min(0.5, 0.12 + (m.radiusKm / 3000) * 0.25);
+      const mm = new THREE.Mesh(new THREE.SphereGeometry(mr, 20, 20), new THREE.MeshStandardMaterial({ color: m.color, roughness: 1 }));
+      group.add(mm); moonMeshes.push(mm);
+      return { mesh: mm, dist: pr + 1.0 + idx * 0.75, T: m.T };
+    });
+    orbitsGroup.add(makeOrbitLine(p, p.color));
+    bodies.push({ p, group, mesh, moons });
+  }
+
+  for (const d of DWARFS) {
+    const group = new THREE.Group(); solarGroup.add(group);
+    const dr = Math.max(0.5, displayRadius(d.radiusKm) * 0.8);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(dr, 24, 24), new THREE.MeshStandardMaterial({ map: planetTexture(d.color, {}), roughness: 1 }));
+    group.add(mesh);
+    const label = makeLabel(d.name, 'dwarf'); label.position.set(0, dr + 1.0, 0); group.add(label); detailLabels.push(label);
+    orbitsGroup.add(makeOrbitLine(d, 0x6b7a99));
+    bodies.push({ d, group, mesh, dwarf: true });
+  }
+
+  // 小行星帶
+  const beltGroup = new THREE.Group(); solarGroup.add(beltGroup);
+  {
+    const n = 4200, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * TAU, r = (2.1 + Math.random() * 1.2) * K_DIST;
+      pos[i*3] = Math.cos(ang) * r; pos[i*3+1] = (Math.random() - 0.5) * K_DIST * 0.08; pos[i*3+2] = Math.sin(ang) * r;
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    beltGroup.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x9b8c7a, size: 1, sizeAttenuation: true, transparent: true, opacity: 0.7 })));
+  }
+
+  return { scene, camera, controls, galaxyGroup, galaxyMat: galaxy.mat, center, solarGroup,
+           orbitsGroup, beltGroup, starfield, cosmic, arrow, motionLabel,
+           moonMeshes, detailLabels, locatorGlow, locatorLabel, bodies };
+}
+
+function updateUniverse(jd) {
+  const tMyr = (jd - J2000) / 365.25 / 1e6;
+  // 銀盤自轉
+  U.galaxyMat.uniforms.uTimeMyr.value = tMyr;
+  // 太陽繞銀心：本輪(徑向)振盪 → 玫瑰線(不閉合)；加上下穿越銀盤 → 路徑非平面
+  const thetaG = galacticSunAngle(jd);
+  const Rk = SUN_ORBIT - GX_EPI_AMP * GX_UNIT * Math.cos(GX_KAPPA * tMyr);
+  const theta = thetaG + (2 * GX_OMEGA_SUN / GX_KAPPA) * (GX_EPI_AMP / GX_SUN_KPC) * Math.sin(GX_KAPPA * tMyr);
+  const yBob = GX_Z_AMP * Math.sin(TAU * tMyr / GX_Z_PERIOD);
+  U.solarGroup.position.set(Rk * Math.cos(theta), yBob, Rk * Math.sin(theta));
+  // 宇宙背景星系串流：本星系群相對 CMB 朝 MOTION_DIR 運動（toroidal 環繞，無接縫）
+  {
+    const drift = cosmicDrift, L = U.cosmic.L, n = U.cosmic.n, base = U.cosmic.base, pos = U.cosmic.pos;
+    const dx = MOTION_DIR.x * drift, dy = MOTION_DIR.y * drift, dz = MOTION_DIR.z * drift;
+    for (let i = 0; i < n; i++) {
+      pos[i*3]   = ((base[i*3]   - dx) % L + L) % L - L / 2;
+      pos[i*3+1] = ((base[i*3+1] - dy) % L + L) % L - L / 2;
+      pos[i*3+2] = ((base[i*3+2] - dz) % L + L) % L - L / 2;
+    }
+    U.cosmic.geo.attributes.position.needsUpdate = true;
+  }
+  // 太陽系內部：用包進有效視窗的 pjd，避免深時間外插使行星座標爆成 NaN
+  const pjd = wrapPlanetJD(jd);
+  for (const b of U.bodies) {
+    if (b.dwarf) { b.group.position.copy(eclToScene(staticBodyPosition(b.d, pjd), K_DIST)); continue; }
+    const p = b.p;
+    b.group.position.copy(eclToScene(planetPosition(p, pjd), K_DIST));
+    b.mesh.rotation.y = TAU * ((pjd - J2000) / p.rot);
+    for (const m of b.moons) {
+      const th = TAU * ((pjd - J2000) / m.T);
+      m.mesh.position.set(Math.cos(th) * m.dist, 0, Math.sin(th) * m.dist);
+    }
+  }
+  U.beltGroup.rotation.y = -0.222 * DEG * (pjd - J2000);
+
+  // LOD：靠近時顯示行星細節標籤，遠離時只顯示「太陽系」定位光暈
+  const near = U.camera.position.distanceTo(U.solarGroup.position) < 5000;
+  const showLbl = state.layers.labels;
+  U.locatorGlow.visible = !near;
+  U.locatorLabel.visible = !near && showLbl;
+  for (const l of U.detailLabels) l.visible = near && showLbl;
+  U.arrow.visible = !near && state.layers.cosmos;
+  U.motionLabel.visible = !near && state.layers.cosmos && showLbl;
+}
+
+// =================================================================================
+// ===== SECTION 5 · 狀態 + 鏡頭聚焦/跟隨 =========================================
+// =================================================================================
+const MIN_EXP = Math.log10(3600);          // 1 小時/秒
+const MAX_EXP = Math.log10(3.15576e16);    // 10 億年/秒
+const sliderToSpeed = (v) => Math.pow(10, MIN_EXP + (v / 1000) * (MAX_EXP - MIN_EXP));
+const speedToSlider = (s) => Math.round((Math.log10(s) - MIN_EXP) / (MAX_EXP - MIN_EXP) * 1000);
+
+function fmtSpeed(s) {
+  const yr = s / 31557600;
+  if (yr >= 1e9) return (yr / 1e9).toFixed(2) + ' Gyr/秒';
+  if (yr >= 1e6) { const m = yr / 1e6; return (m < 100 ? m.toFixed(1) : Math.round(m)) + ' Myr/秒'; }
+  if (yr >= 1)   return (yr < 10 ? yr.toFixed(2) : Math.round(yr)) + ' 年/秒';
+  const day = s / 86400;
+  if (day >= 1)  return day.toFixed(1) + ' 天/秒';
+  return (s / 3600).toFixed(1) + ' 小時/秒';
+}
+function fmtDate(jd) {
+  const yrs = (jd - J2000) / 365.25, a = Math.abs(yrs), sgn = yrs >= 0 ? '+' : '';
+  if (a > 4000) {
+    if (a >= 1e8) return `J2000 ${sgn}${(yrs / 1e9).toFixed(3)} Gyr`;
+    if (a >= 1e5) return `J2000 ${sgn}${(yrs / 1e6).toFixed(2)} Myr`;
+    return `J2000 ${sgn}${Math.round(yrs)} 年`;
+  }
+  return jdToDate(jd).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+}
+function jdToInputValue(jd) {
+  if (Math.abs((jd - J2000) / 365.25) > 4000) return '';
+  return jdToDate(jd).toISOString().slice(0, 16);
+}
+
+const state = {
+  simJD: J2000 - 1e10 * 365.25,          // 初始：約 100 億年前
+  playing: true,
+  speed: 1e7 * 31557600,                  // 1 秒 = 1000 萬年（可用預設切到 1/10 億年）
+  focus: 'galaxy',
+  layers: { orbits: true, labels: true, belt: true, moons: true, stars: true, galaxy: true, cosmos: true },
+};
+
+let U, camTween = null;
+let cosmicDrift = 0;               // 宇宙背景串流的視覺里程（播放時累加，每幀上限以免極端速率混疊）
+const _tmp = new THREE.Vector3();
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
+function focusTarget(f) { return f === 'solar' ? U.solarGroup.position.clone() : new THREE.Vector3(0, 0, 0); }
+function focusCamPos(f) {
+  return f === 'solar'
+    ? U.solarGroup.position.clone().add(new THREE.Vector3(0, 120, 230))
+    : new THREE.Vector3(0, 30000, 72000);
+}
+function setFocus(f) {
+  state.focus = f;
+  // 兩尺度的合理速率差很大，切換時各給適合的預設（之後仍可自由調整）
+  const sp = f === 'solar' ? 2629800 : 1e7 * 31557600;   // 太陽系 1月/秒；銀河 1000萬年/秒
+  state.speed = sp; $('speed').value = speedToSlider(sp); $('speedRead').textContent = fmtSpeed(sp);
+  document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === f));
+  U.controls.enabled = false;
+  U.controls.zoomToCursor = (f === 'galaxy');
+  camTween = { t: 0, dur: 1.4, fromPos: U.camera.position.clone(), toPos: focusCamPos(f), fromTarget: U.controls.target.clone(), toTarget: focusTarget(f) };
+}
+
+// =================================================================================
+// ===== SECTION 6 · 時鐘迴圈 =====================================================
+// =================================================================================
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(Math.max((now - last) / 1000, 0), 0.1);
+  last = now;
+  if (state.playing) {
+    state.simJD += state.speed * dt / 86400;
+    // 背景串流里程：每幀上限 ≈ 0.18×星系間距，極端速率時平順飽和而非混疊閃爍
+    const dMyr = (state.speed * dt / 86400) / 365.25 / 1e6;
+    cosmicDrift += Math.min(GX_DRIFT * dMyr, U.cosmic.spacing * 0.18);
+  }
+
+  updateUniverse(state.simJD);
+
+  if (camTween) {
+    camTween.t += dt / camTween.dur;
+    const k = ease(Math.min(1, camTween.t));
+    U.camera.position.lerpVectors(camTween.fromPos, camTween.toPos, k);
+    U.controls.target.lerpVectors(camTween.fromTarget, camTween.toTarget, k);
+    if (camTween.t >= 1) { camTween = null; U.controls.enabled = true; }
+  } else {
+    if (state.focus === 'solar') {                 // 跟隨：太陽系恆居中，背景銀河掃過＝公轉
+      _tmp.copy(U.solarGroup.position).sub(U.controls.target);
+      U.camera.position.add(_tmp);
+      U.controls.target.add(_tmp);
+    }
+    U.controls.update();
+  }
+
+  renderer.render(U.scene, U.camera);
+  labelR.render(U.scene, U.camera);
+  document.getElementById('dateRead').innerHTML = '時間：<b>' + fmtDate(state.simJD) + '</b>';
+  requestAnimationFrame(tick);
+}
+
+// =================================================================================
+// ===== SECTION 7 · UI 連結 ======================================================
+// =================================================================================
+const $ = (id) => document.getElementById(id);
+
+function applyLayers() {
+  const L = state.layers;
+  U.orbitsGroup.visible = L.orbits;
+  U.beltGroup.visible = L.belt;
+  U.starfield.visible = L.stars;
+  U.galaxyGroup.visible = L.galaxy;
+  U.center.visible = L.galaxy;
+  U.cosmic.pts.visible = L.cosmos;   // 箭頭/標籤由 updateUniverse 依距離與 L.cosmos 控制
+  U.moonMeshes.forEach((m) => (m.visible = L.moons));
+  labelR.domElement.style.display = L.labels ? '' : 'none';
+}
+
+function setSpeedFromSlider() { state.speed = sliderToSpeed(+$('speed').value); $('speedRead').textContent = fmtSpeed(state.speed); }
+function setPlaying(p) { state.playing = p; $('playBtn').textContent = p ? '⏸ 暫停' : '▶ 播放'; }
+
+function wireUI() {
+  $('speed').value = speedToSlider(state.speed);
+  $('speedRead').textContent = fmtSpeed(state.speed);
+  $('dt').value = jdToInputValue(dateToJD(new Date()));   // 預填當下時間，方便直接調整/輸入
+  setPlaying(true);
+
+  $('viewSeg').addEventListener('click', (e) => { const v = e.target.dataset.view; if (v) setFocus(v); });
+  $('playBtn').addEventListener('click', () => setPlaying(!state.playing));
+  $('speed').addEventListener('input', setSpeedFromSlider);
+  $('presets').addEventListener('click', (e) => {
+    const sec = e.target.dataset.sec; if (!sec) return;
+    state.speed = +sec; $('speed').value = speedToSlider(state.speed); $('speedRead').textContent = fmtSpeed(state.speed);
+  });
+  $('nowBtn').addEventListener('click', () => { state.simJD = dateToJD(new Date()); $('dt').value = jdToInputValue(state.simJD); });
+  $('fixBtn').addEventListener('click', () => {
+    if (!$('dt').value) return;
+    const d = new Date($('dt').value + 'Z');
+    if (isNaN(d)) return;
+    state.simJD = dateToJD(d); setPlaying(false);
+  });
+
+  const lyMap = { lyOrbits: 'orbits', lyLabels: 'labels', lyBelt: 'belt', lyMoons: 'moons', lyStars: 'stars', lyGalaxy: 'galaxy', lyCosmos: 'cosmos' };
+  for (const id in lyMap) $(id).addEventListener('change', (e) => { state.layers[lyMap[id]] = e.target.checked; applyLayers(); });
+
+  $('infoBtn').addEventListener('click', () => $('info').classList.toggle('hidden'));
+  $('infoClose').addEventListener('click', () => $('info').classList.add('hidden'));
+
+  addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); setPlaying(!state.playing); }
+    else if (e.key === '[') { $('speed').value = Math.max(0, +$('speed').value - 25); setSpeedFromSlider(); }
+    else if (e.key === ']') { $('speed').value = Math.min(1000, +$('speed').value + 25); setSpeedFromSlider(); }
+  });
+
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    labelR.setSize(innerWidth, innerHeight);
+    U.camera.aspect = innerWidth / innerHeight; U.camera.updateProjectionMatrix();
+  });
+}
+
+// =================================================================================
+// ===== SECTION 8 · Bootstrap ====================================================
+// =================================================================================
+U = buildUniverse();
+wireUI();
+applyLayers();
+updateUniverse(state.simJD);                       // 先就位，讓初始鏡頭對準正確的太陽系位置
+U.controls.target.copy(focusTarget(state.focus));
+U.camera.position.copy(focusCamPos(state.focus));
+U.controls.zoomToCursor = (state.focus === 'galaxy');
+$('loading').classList.add('hidden');
+requestAnimationFrame((t) => { last = t; tick(t); });
+</script>
+</body>
+</html>
