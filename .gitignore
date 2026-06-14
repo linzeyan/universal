@@ -1,0 +1,3 @@
+# build helpers (Makefile)
+.index.html.bak
+index.html.tmp
